@@ -33,7 +33,11 @@ const config = {
   makers: [
     {
       name: '@electron-forge/maker-squirrel',
-      config: {},
+      config: {
+        name: 'electron_demo',
+        authors: 'BreakDayz',
+        description: 'BreakDayz Desktop App',
+      },
     },
     {
       name: '@electron-forge/maker-zip',
@@ -53,8 +57,6 @@ const config = {
       name: '@electron-forge/plugin-auto-unpack-natives',
       config: {},
     },
-    // Fuses are used to enable/disable various Electron functionality
-    // at package time, before code signing the application
     new FusesPlugin({
       version: FuseVersion.V1,
       [FuseV1Options.RunAsNode]: false,
