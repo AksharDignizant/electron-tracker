@@ -4,7 +4,7 @@ const nextConfig: NextConfig = {
   output: "export",
   distDir: "next-out",
   trailingSlash: true,
-  assetPrefix: "./",
+  assetPrefix: process.env.NODE_ENV === "production" ? "./" : undefined,
   images: {
     unoptimized: true,
   },

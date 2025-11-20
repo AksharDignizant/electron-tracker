@@ -2,13 +2,23 @@ import {
   app,
   BrowserWindow,
   Menu,
+  nativeImage,
   Notification,
   Tray,
-  nativeImage,
+  protocol,
 } from "electron";
+import isDev from "electron-is-dev";
+import { existsSync } from "node:fs";
 import path from "node:path";
 
-const isDev = process.env.NODE_ENV === "development";
+const shouldDisableSandbox =
+  process.platform === "linux" && process.env.ELECTRON_FORCE_SANDBOX !== "1";
+
+if (shouldDisableSandbox) {
+  app.commandLine.appendSwitch("no-sandbox");
+  app.commandLine.appendSwitch("disable-gpu-sandbox");
+}
+
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 if (!gotSingleInstanceLock) {
@@ -21,11 +31,46 @@ let tray: Tray | null = null;
 let isClockedIn = false;
 let clockedInAt: Date | null = null;
 
-const trayIconBase64 =
-  "iVBORw0KGgoAAAANSUhEUgAAAA4AAAAOCAYAAAAfSC3RAAAALElEQVR42mNgGAWjYBSMglEwCkbDKBg1yOkgNhBoArEahJqBaAzRxSAaAAA/6RsoWrK0YkAAAAASUVORK5CYII=";
+const trayIcon = isDev
+  ? path.join(__dirname, "../public/logo.svg")
+  : path.join(__dirname, "../next-out/logo.svg");
+const exportDir = path.join(__dirname, "../next-out");
 
-function getTrayIcon() {
-  return nativeImage.createFromBuffer(Buffer.from(trayIconBase64, "base64"));
+function interceptFileSchemeAssets() {
+  if (isDev) return;
+
+  protocol.interceptFileProtocol("file", (request, callback) => {
+    try {
+      const url = new URL(request.url);
+      const decodedPath = decodeURIComponent(url.pathname);
+      const normalizedPath =
+        process.platform === "win32" && decodedPath.startsWith("/")
+          ? decodedPath.slice(1)
+          : decodedPath;
+
+      if (normalizedPath.startsWith(exportDir)) {
+        callback({ path: normalizedPath });
+        return;
+      }
+
+      const relativePath = normalizedPath.replace(/^\/+/, "");
+      if (!relativePath) {
+        callback({ path: normalizedPath });
+        return;
+      }
+
+      const candidatePath = path.join(exportDir, relativePath);
+      if (existsSync(candidatePath)) {
+        callback({ path: candidatePath });
+        return;
+      }
+    } catch (error) {
+      console.error("[electron] Failed to map asset path:", error);
+    }
+
+    const fallbackPath = request.url.replace("file://", "");
+    callback({ path: fallbackPath });
+  });
 }
 
 function formatTime(date: Date | null) {
@@ -111,7 +156,7 @@ function toggleWindowVisibility() {
 
 function createTray() {
   if (tray) return;
-  tray = new Tray(getTrayIcon());
+  tray = new Tray(nativeImage.createFromPath(trayIcon));
   tray.on("click", toggleWindowVisibility);
   updateTrayMenu();
 }
@@ -157,13 +202,12 @@ async function createWindow() {
 
 async function createTrayWindow() {
   trayWindow = new BrowserWindow({
-    width: 420,
-    height: 760,
+    width: 360,
+    height: 670,
     show: false,
     frame: false,
     resizable: false,
     skipTaskbar: true,
-    alwaysOnTop: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
     },
@@ -202,6 +246,7 @@ if (gotSingleInstanceLock) {
   });
 
   app.whenReady().then(() => {
+    interceptFileSchemeAssets();
     createTrayWindow();
     createTray();
     createWindow();

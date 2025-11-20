@@ -1,8 +1,12 @@
 import { spawn } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
 
 let hasBuilt = false;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const postPackageScript = path.join(__dirname, 'scripts', 'post-package.mjs');
 
 function run(command, args = []) {
   return new Promise((resolve, reject) => {
@@ -18,6 +22,11 @@ function run(command, args = []) {
   });
 }
 
+async function patchLinuxOutputs(targets = []) {
+  if (!targets.length) return;
+  await run('node', [postPackageScript, ...targets]);
+}
+
 const config = {
   packagerConfig: {
     asar: true,
@@ -27,6 +36,9 @@ const config = {
       if (hasBuilt) return;
       await run('npm', ['run', 'build']);
       hasBuilt = true;
+    },
+    async postPackage(_forgeConfig, packageResult) {
+      await patchLinuxOutputs(packageResult?.outputPaths ?? []);
     },
   },
   rebuildConfig: {},
